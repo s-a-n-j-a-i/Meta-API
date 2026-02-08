@@ -1,6 +1,7 @@
 // Import Express.js
 require('dotenv').config();
 const express = require('express');
+const axios = require('axios');
 
 // Create an Express app
 const app = express();
@@ -32,11 +33,46 @@ app.get('/', (req, res) => {
 });
 
 // Route for POST requests
-app.post('/', (req, res) => {
+app.post('/', async (req, res) => {
     const timestamp = new Date().toISOString().replace('T', ' ').slice(0, 19);
     console.log(`\n\nWebhook received ${timestamp}\n`);
     console.log(JSON.stringify(req.body, null, 2));
-    res.status(200).end();
+
+    const body = req.body;
+
+    if (body.object === 'whatsapp_business_account') {
+        if (body.entry && body.entry[0].changes && body.entry[0].changes[0].value.messages && body.entry[0].changes[0].value.messages[0]) {
+            const phone_number_id = body.entry[0].changes[0].value.metadata.phone_number_id;
+            const from = body.entry[0].changes[0].value.messages[0].from;
+            const msg_body = body.entry[0].changes[0].value.messages[0].text.body;
+
+            console.log('Phone number ID:', phone_number_id);
+            console.log('From:', from);
+            console.log('Message body:', msg_body);
+
+            try {
+                await axios({
+                    method: 'POST',
+                    url: `https://graph.facebook.com/v13.0/${phone_number_id}/messages`,
+                    data: {
+                        messaging_product: 'whatsapp',
+                        to: from,
+                        text: { body: msg_body },
+                    },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`,
+                    },
+                });
+                console.log('Message echoed successfully');
+            } catch (error) {
+                console.error('Error sending message:', error.response ? error.response.data : error.message);
+            }
+        }
+        res.sendStatus(200);
+    } else {
+        res.sendStatus(404);
+    }
 });
 
 // Start the server
